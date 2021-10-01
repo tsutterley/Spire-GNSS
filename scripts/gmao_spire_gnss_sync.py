@@ -79,8 +79,8 @@ def gmao_spire_gnss_sync(DIRECTORY, TIMEOUT=None, LOG=False, MODE=0o775):
     for colname in files:
         #-- print tarfile name to log
         print(colname, file=fid1)
-        PATH = [*PATH,'grazing_angle_L2',colname]
-        buffer = spire_toolkit.utilities.from_http(PATH,
+        REMOTE = [*PATH,'grazing_angle_L2',colname]
+        buffer = spire_toolkit.utilities.from_http(REMOTE,
             timeout=TIMEOUT, context=None)
         #-- open the monthly tar file
         tar1 = tarfile.open(fileobj=buffer, mode='r')

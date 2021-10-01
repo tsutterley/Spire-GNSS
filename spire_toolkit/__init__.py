@@ -1,15 +1,19 @@
 """
-A tide prediction toolkit for Python
-====================================
+A Spire GNSS toolkit for Python
+===============================
 
-pyTMD contains Python tools for reading OTIS, GOT and FES formatted tidal
-solutions to predict ocean and load tides
+spire_toolkit contains Python tools for obtaining and working with
+elevation data from Spire GNSS grazing angle altimetry
 
-The package works using scientific Python packages (numpy, scipy and pyproj)
-combined with data storage in netCDF4 and HDF5 and mapping using
+The package works using Python packages (numpy, scipy, pyproj)
+combined with data storage in netCDF4, and mapping with
 matplotlib and cartopy
 
-Documentation is available at https://pytmd.readthedocs.io
+It aims to be a simple and efficient solution for using data from
+Spire GNSS grazing angle altimetry and to support its science
+applications
+
+Documentation is available at https://spire-gnss.readthedocs.io
 """
 import spire_toolkit.time
 import spire_toolkit.utilities
