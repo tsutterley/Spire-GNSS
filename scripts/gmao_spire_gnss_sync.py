@@ -16,6 +16,7 @@ COMMAND LINE OPTIONS:
     -P X, --password X: password for NASA GMAO Extranet Login
     -N X, --netrc X: path to .netrc file for authentication
     -D X, --directory X: working data directory
+    -P X, --np X: Number of processes to use in file downloads
     -t X, --timeout X: Timeout in seconds for blocking operations
     -l, --log: output log of files downloaded
     -M X, --mode X: Local permissions mode of the directories and files synced
@@ -51,10 +52,17 @@ import tarfile
 import builtins
 import argparse
 import posixpath
+import traceback
+import multiprocessing as mp
 import spire_toolkit.utilities
 
 #-- PURPOSE: Syncs Spire GNSS grazing angle altimetry data
-def gmao_spire_gnss_sync(DIRECTORY, TIMEOUT=None, LOG=False, MODE=0o775):
+def gmao_spire_gnss_sync(DIRECTORY,
+    PROCESSES=0,
+    TIMEOUT=None,
+    LOG=False,
+    MODE=0o775):
+
     #-- create log file with list of synchronized files (or print to terminal)
     if LOG:
         #-- format: GMAO_Spire_GNSS_sync_2002-04-01.log
@@ -72,46 +80,95 @@ def gmao_spire_gnss_sync(DIRECTORY, TIMEOUT=None, LOG=False, MODE=0o775):
     PATH = [HOST,'extranet','collab','spire_team']
     files = spire_toolkit.utilities.gmao_list(PATH, timeout=TIMEOUT,
         adddirlink="grazing_angle_L2", sort=True)
-    #-- regular expression pattern for extracting data from files
-    rx = re.compile(r'(spire_gnss-r)_(L\d+)_(.*?)_(v\d+\.\d+)_'
-        r'(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})_(.*?)\.nc$')
-    #-- get each tarfile from the GMAO extranet server
-    for colname in files:
-        #-- print tarfile name to log
-        print(colname, file=fid1)
-        PATH = [*PATH,'grazing_angle_L2',colname]
-        buffer = spire_toolkit.utilities.from_http(PATH,
-            timeout=TIMEOUT, context=None)
-        #-- open the monthly tar file
-        tar1 = tarfile.open(fileobj=buffer, mode='r')
-        mem1 = [f for f in tar1.getmembers() if f.name.endswith('tar')]
-        #-- for each file within the tarfile
-        for member in mem1:
-            #-- print tarfile name to log
-            print('\t{0}'.format(member.name), file=fid1)
-            #-- open the daily tarfile
-            fileID = io.BytesIO(tar1.extractfile(member).read())
-            tar2 = tarfile.open(fileobj=fileID, mode='r')
-            mem2 = [f for f in tar2.getmembers() if f.name.endswith('nc')]
-            #-- extract netCDF4 files to local directory
-            for nc in mem2:
-                print('\t\t{0} -->'.format(nc.name), file=fid1)
-                #-- extract parameters from netCDF4 file
-                MS,LV,PRD,VERS,YY,MM,DD,HH,MN,SS,AUX = rx.findall(nc.name).pop()
-                SUBDIRECTORY = '{0}.{1}.{2}'.format(YY,MM,DD)
-                if not os.access(os.path.join(DIRECTORY,SUBDIRECTORY), os.F_OK):
-                    os.makedirs(os.path.join(DIRECTORY,SUBDIRECTORY), mode=MODE)
-                #-- extract file
-                tar2.extract(nc, path=os.path.join(DIRECTORY,SUBDIRECTORY))
-                local_file = os.path.join(DIRECTORY,SUBDIRECTORY,nc.name)
-                print('\t\t\t{0} -->'.format(local_file), file=fid1)
-                #-- change the permissions mode
-                os.chmod(local_file,MODE)
+
+    #-- sync in series if PROCESSES = 0
+    if (PROCESSES == 0):
+        #-- get each tarfile from the GMAO extranet server
+        for colname in files:
+            #-- sync Spire-GNSS files with GMAO server
+            REMOTE = [*PATH,'grazing_angle_L2',colname]
+            kwds = dict(TIMEOUT=TIMEOUT, MODE=MODE)
+            output = multiprocess_sync(REMOTE, **kwds)
+            #-- print the output string
+            print(output, file=fid1) if output else None
+    else:
+        #-- set multiprocessing start method
+        ctx = mp.get_context("fork")
+        #-- sync in parallel with multiprocessing Pool
+        pool = ctx.Pool(processes=PROCESSES)
+        #-- sync each Spire-GNSS data file
+        out = []
+        #-- get each tarfile from the GMAO extranet server
+        for colname in files:
+            #-- sync Spire-GNSS files with GMAO server
+            REMOTE = [*PATH,'grazing_angle_L2',colname]
+            kwds = dict(TIMEOUT=TIMEOUT, MODE=MODE)
+            out.append(pool.apply_async(multiprocess_sync,
+                args=(REMOTE,),kwds=kwds))
+        #-- start multiprocessing jobs
+        #-- close the pool
+        #-- prevents more tasks from being submitted to the pool
+        pool.close()
+        #-- exit the completed processes
+        pool.join()
+        #-- print the output string
+        for output in out:
+            temp = output.get()
+            print(temp, file=fid1) if temp else None
 
     #-- close log file and set permissions level to MODE
     if LOG:
         fid1.close()
         os.chmod(os.path.join(DIRECTORY,LOGFILE), MODE)
+
+#-- PURPOSE: wrapper for running the sync program in multiprocessing mode
+def multiprocess_sync(*args, **kwds):
+    try:
+        output = http_pull_file(*args, **kwds)
+    except:
+        #-- if there has been an error exception
+        #-- print the type, value, and stack trace of the
+        #-- current exception being handled
+        print('process id {0:d} failed'.format(os.getpid()))
+        traceback.print_exc()
+    else:
+        return output
+
+#-- PURPOSE: try extracting Spire files from a tar file
+def http_pull_file(REMOTE, DIRECTORY=None, TIMEOUT=None, MODE=None):
+    #-- regular expression pattern for extracting data from files
+    rx = re.compile(r'(spire_gnss-r)_(L\d+)_(.*?)_(v\d+\.\d+)_'
+        r'(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})_(.*?)\.nc$')
+    #-- get BytesIO object containing data from tar file
+    buffer = spire_toolkit.utilities.from_http(REMOTE,
+        timeout=TIMEOUT, context=None)
+    #-- open the monthly tar file
+    tar1 = tarfile.open(fileobj=buffer, mode='r')
+    mem1 = [f for f in tar1.getmembers() if f.name.endswith('tar')]
+    #-- for each file within the tarfile
+    for member in mem1:
+        #-- print tarfile name to log
+        output = '\t{0}'.format(member.name)
+        #-- open the daily tarfile
+        fileID = io.BytesIO(tar1.extractfile(member).read())
+        tar2 = tarfile.open(fileobj=fileID, mode='r')
+        mem2 = [f for f in tar2.getmembers() if f.name.endswith('nc')]
+        #-- extract netCDF4 files to local directory
+        for nc in mem2:
+            #-- extract parameters from netCDF4 file
+            MS,LV,PRD,VERS,YY,MM,DD,HH,MN,SS,AUX = rx.findall(nc.name).pop()
+            SUBDIRECTORY = '{0}.{1}.{2}'.format(YY,MM,DD)
+            #-- create output local directory if non-existent
+            if not os.access(os.path.join(DIRECTORY,SUBDIRECTORY), os.F_OK):
+                os.makedirs(os.path.join(DIRECTORY,SUBDIRECTORY), mode=MODE)
+            #-- extract file
+            tar2.extract(nc, path=os.path.join(DIRECTORY,SUBDIRECTORY))
+            local_file = os.path.join(DIRECTORY,SUBDIRECTORY,nc.name)
+            output ='\t\t{0} -->\n\t\t\t{1}'.format(nc.name,local_file)
+            #-- change the permissions mode
+            os.chmod(local_file,MODE)
+    #-- return the output string
+    return output
 
 #-- Main program that calls gmao_spire_gnss_sync()
 def main():
@@ -137,6 +194,10 @@ def main():
         type=lambda p: os.path.abspath(os.path.expanduser(p)),
         default=os.getcwd(),
         help='Working data directory')
+    #-- run sync in series if processes is 0
+    parser.add_argument('--np','-P',
+        metavar='PROCESSES', type=int, default=0,
+        help='Number of processes to use in file downloads')
     #-- connection timeout
     parser.add_argument('--timeout','-t',
         type=int, default=360,
@@ -187,8 +248,11 @@ def main():
 
     #-- check internet connection before attempting to run program
     if spire_toolkit.utilities.check_connection(LOGIN):
-        gmao_spire_gnss_sync(args.directory, TIMEOUT=args.timeout,
-            LOG=args.log, MODE=args.mode)
+        gmao_spire_gnss_sync(args.directory,
+            PROCESSES=args.np,
+            TIMEOUT=args.timeout,
+            LOG=args.log,
+            MODE=args.mode)
 
 #-- run main program
 if __name__ == '__main__':
