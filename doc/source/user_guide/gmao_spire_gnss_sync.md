@@ -14,6 +14,7 @@ python gmao_spire_gnss_sync.py --directory <path_to_directory>
 - `-P X`, `--password X`: Password for NASA GMAO Extranet Login
 - `-N X`, `--netrc X`: path to .netrc file for authentication
 - `-D X`, `--directory X`: working data directory
+- `-Y X`, `--year X`: Years to sync
 - `-P X`, `--np X`: Number of processes to use in file downloads
 - `-t X`, `--timeout X`: Timeout in seconds for blocking operations
 - `-l`, `--log`: output log of files downloaded

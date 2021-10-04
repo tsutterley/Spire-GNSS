@@ -16,6 +16,7 @@ COMMAND LINE OPTIONS:
     -P X, --password X: password for NASA GMAO Extranet Login
     -N X, --netrc X: path to .netrc file for authentication
     -D X, --directory X: working data directory
+    -Y X, --year X: Years to sync
     -P X, --np X: Number of processes to use in file downloads
     -t X, --timeout X: Timeout in seconds for blocking operations
     -l, --log: output log of files downloaded
@@ -58,6 +59,7 @@ import spire_toolkit.utilities
 
 #-- PURPOSE: Syncs Spire GNSS grazing angle altimetry data
 def gmao_spire_gnss_sync(DIRECTORY,
+    YEAR=None,
     PROCESSES=0,
     TIMEOUT=None,
     LOG=False,
@@ -76,10 +78,14 @@ def gmao_spire_gnss_sync(DIRECTORY,
 
     #-- remote host for Spire GNSS data
     HOST = 'https://gmao.gsfc.nasa.gov'
+    #-- regular expression pattern for finding tar files
+    regex_pattern = r'(spire_gnss-r)_(L\d+).(.*?)_({0})(\d{{2}}).tar'
+    regex_years = '|'.join(['{0:4d}'.format(y) for y in YEAR])
+    R1 = re.compile(regex_pattern.format(regex_years),re.VERBOSE)
     #-- open connection with GMAO extranet server at remote directory
     PATH = [HOST,'extranet','collab','spire_team']
     files = spire_toolkit.utilities.gmao_list(PATH, timeout=TIMEOUT,
-        adddirlink="grazing_angle_L2", sort=True)
+        adddirlink="grazing_angle_L2", pattern=R1, sort=True)
 
     #-- sync in series if PROCESSES = 0
     if (PROCESSES == 0):
@@ -87,7 +93,8 @@ def gmao_spire_gnss_sync(DIRECTORY,
         for colname in files:
             #-- sync Spire-GNSS files with GMAO server
             REMOTE = [*PATH,'grazing_angle_L2',colname]
-            kwds = dict(TIMEOUT=TIMEOUT, MODE=MODE)
+            kwds = dict(DIRECTORY=DIRECTORY, TIMEOUT=TIMEOUT,
+                MODE=MODE)
             output = multiprocess_sync(REMOTE, **kwds)
             #-- print the output string
             print(output, file=fid1) if output else None
@@ -102,7 +109,8 @@ def gmao_spire_gnss_sync(DIRECTORY,
         for colname in files:
             #-- sync Spire-GNSS files with GMAO server
             REMOTE = [*PATH,'grazing_angle_L2',colname]
-            kwds = dict(TIMEOUT=TIMEOUT, MODE=MODE)
+            kwds = dict(DIRECTORY=DIRECTORY, TIMEOUT=TIMEOUT,
+                MODE=MODE)
             out.append(pool.apply_async(multiprocess_sync,
                 args=(REMOTE,),kwds=kwds))
         #-- start multiprocessing jobs
@@ -194,6 +202,11 @@ def main():
         type=lambda p: os.path.abspath(os.path.expanduser(p)),
         default=os.getcwd(),
         help='Working data directory')
+    #--  years of Spire data to sync
+    now = time.gmtime()
+    parser.add_argument('--year','-Y',
+        type=int, nargs='+', default=range(2020,now.tm_year+1),
+        help='Years to sync')
     #-- run sync in series if processes is 0
     parser.add_argument('--np','-P',
         metavar='PROCESSES', type=int, default=0,
@@ -249,6 +262,7 @@ def main():
     #-- check internet connection before attempting to run program
     if spire_toolkit.utilities.check_connection(LOGIN):
         gmao_spire_gnss_sync(args.directory,
+            YEAR=args.year,
             PROCESSES=args.np,
             TIMEOUT=args.timeout,
             LOG=args.log,
