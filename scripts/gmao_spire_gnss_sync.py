@@ -213,7 +213,7 @@ def main():
     #-- Spire data products to sync
     products = ['grzAlt','grzIce']
     parser.add_argument('--product','-p',
-        type=int, nargs='+', choices=products, default=products,
+        type=str, nargs='+', choices=products, default=products,
         help='Spire data products to sync')
     #-- years of Spire data to sync
     now = time.gmtime()

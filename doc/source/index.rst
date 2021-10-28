@@ -18,3 +18,4 @@ Spire-GNSS
     :caption: Utilities
 
     user_guide/gmao_spire_gnss_sync.md
+    user_guide/tile_spire_gnss_data.md
