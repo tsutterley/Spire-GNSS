@@ -13,10 +13,11 @@ CALLING SEQUENCE:
 COMMAND LINE OPTIONS:
     --help: list the command line options
     -U X, --user X: username for NASA GMAO Extranet Login
-    -P X, --password X: password for NASA GMAO Extranet Login
+    -W X, --password X: password for NASA GMAO Extranet Login
     -N X, --netrc X: path to .netrc file for authentication
     -D X, --directory X: working data directory
-    -Y X, --year X: Years to sync
+    -p X, --product X: Spire data products to sync
+    -Y X, --year X: Years of Spire data to sync
     -P X, --np X: Number of processes to use in file downloads
     -t X, --timeout X: Timeout in seconds for blocking operations
     -l, --log: output log of files downloaded
@@ -38,6 +39,7 @@ PROGRAM DEPENDENCIES:
     utilities.py: download and management utilities for syncing files
 
 UPDATE HISTORY:
+    Updated 10/2021: using python logging for handling verbose output
     Written 10/2021
 """
 from __future__ import print_function
@@ -49,6 +51,7 @@ import re
 import time
 import netrc
 import getpass
+import logging
 import tarfile
 import builtins
 import argparse
@@ -59,6 +62,7 @@ import spire_toolkit.utilities
 
 #-- PURPOSE: Syncs Spire GNSS grazing angle altimetry data
 def gmao_spire_gnss_sync(DIRECTORY,
+    PRODUCT=[],
     YEAR=None,
     PROCESSES=0,
     TIMEOUT=None,
@@ -70,18 +74,20 @@ def gmao_spire_gnss_sync(DIRECTORY,
         #-- format: GMAO_Spire_GNSS_sync_2002-04-01.log
         today = time.strftime('%Y-%m-%d',time.localtime())
         LOGFILE = 'GMAO_Spire_GNSS_sync_{0}.log'.format(today)
-        fid1 = open(os.path.join(DIRECTORY,LOGFILE),'w')
-        print('GMAO Spire GNSS Sync Log ({0})'.format(today), file=fid1)
+        logging.basicConfig(filename=os.path.join(DIRECTORY,LOGFILE),
+            level=logging.INFO)
+        logging.info('GMAO Spire GNSS Sync Log ({0})'.format(today))
     else:
         #-- standard output (terminal output)
-        fid1 = sys.stdout
+        logging.basicConfig(level=logging.INFO)
 
     #-- remote host for Spire GNSS data
     HOST = 'https://gmao.gsfc.nasa.gov'
     #-- regular expression pattern for finding tar files
-    regex_pattern = r'(spire_gnss-r)_(L\d+).(.*?)_({0})(\d{{2}}).tar'
-    regex_years = '|'.join(['{0:4d}'.format(y) for y in YEAR])
-    R1 = re.compile(regex_pattern.format(regex_years),re.VERBOSE)
+    regex_pattern = r'(spire_gnss-r)_(L\d+).({0})_({1})(\d{{2}}).tar'
+    regex_products = r'|'.join(PRODUCT) if PRODUCT else r'.*?'
+    regex_years = r'|'.join([r'{0:4d}'.format(y) for y in YEAR])
+    R1 = re.compile(regex_pattern.format(regex_products,regex_years))
     #-- open connection with GMAO extranet server at remote directory
     PATH = [HOST,'extranet','collab','spire_team']
     files = spire_toolkit.utilities.gmao_list(PATH, timeout=TIMEOUT,
@@ -97,7 +103,7 @@ def gmao_spire_gnss_sync(DIRECTORY,
                 MODE=MODE)
             output = multiprocess_sync(REMOTE, **kwds)
             #-- print the output string
-            print(output, file=fid1) if output else None
+            logging.info(output)
     else:
         #-- set multiprocessing start method
         ctx = mp.get_context("fork")
@@ -122,23 +128,22 @@ def gmao_spire_gnss_sync(DIRECTORY,
         #-- print the output string
         for output in out:
             temp = output.get()
-            print(temp, file=fid1) if temp else None
+            logging.info(temp)
 
     #-- close log file and set permissions level to MODE
     if LOG:
-        fid1.close()
         os.chmod(os.path.join(DIRECTORY,LOGFILE), MODE)
 
 #-- PURPOSE: wrapper for running the sync program in multiprocessing mode
 def multiprocess_sync(*args, **kwds):
     try:
         output = http_pull_file(*args, **kwds)
-    except:
+    except Exception as e:
         #-- if there has been an error exception
         #-- print the type, value, and stack trace of the
         #-- current exception being handled
-        print('process id {0:d} failed'.format(os.getpid()))
-        traceback.print_exc()
+        logging.critical('process id {0:d} failed'.format(os.getpid()))
+        logging.error(traceback.format_exc())
     else:
         return output
 
@@ -154,9 +159,10 @@ def http_pull_file(REMOTE, DIRECTORY=None, TIMEOUT=None, MODE=None):
     tar1 = tarfile.open(fileobj=buffer, mode='r')
     mem1 = [f for f in tar1.getmembers() if f.name.endswith('tar')]
     #-- for each file within the tarfile
+    output = ''
     for member in mem1:
         #-- print tarfile name to log
-        output = '\t{0}'.format(member.name)
+        output += '\t{0}\n'.format(member.name)
         #-- open the daily tarfile
         fileID = io.BytesIO(tar1.extractfile(member).read())
         tar2 = tarfile.open(fileobj=fileID, mode='r')
@@ -172,7 +178,9 @@ def http_pull_file(REMOTE, DIRECTORY=None, TIMEOUT=None, MODE=None):
             #-- extract file
             tar2.extract(nc, path=os.path.join(DIRECTORY,SUBDIRECTORY))
             local_file = os.path.join(DIRECTORY,SUBDIRECTORY,nc.name)
-            output ='\t\t{0} -->\n\t\t\t{1}'.format(nc.name,local_file)
+            output += '\t\t{0} -->\n\t\t\t{1}\n'.format(nc.name,local_file)
+            #-- use original modification time from tar file
+            os.utime(local_file,(os.stat(local_file).st_atime,nc.mtime))
             #-- change the permissions mode
             os.chmod(local_file,MODE)
     #-- return the output string
@@ -202,11 +210,16 @@ def main():
         type=lambda p: os.path.abspath(os.path.expanduser(p)),
         default=os.getcwd(),
         help='Working data directory')
-    #--  years of Spire data to sync
+    #-- Spire data products to sync
+    products = ['grzAlt','grzIce']
+    parser.add_argument('--product','-p',
+        type=str, nargs='+', choices=products, default=products,
+        help='Spire data products to sync')
+    #-- years of Spire data to sync
     now = time.gmtime()
     parser.add_argument('--year','-Y',
         type=int, nargs='+', default=range(2020,now.tm_year+1),
-        help='Years to sync')
+        help='Years of Spire data to sync')
     #-- run sync in series if processes is 0
     parser.add_argument('--np','-P',
         metavar='PROCESSES', type=int, default=0,
@@ -262,6 +275,7 @@ def main():
     #-- check internet connection before attempting to run program
     if spire_toolkit.utilities.check_connection(LOGIN):
         gmao_spire_gnss_sync(args.directory,
+            PRODUCT=args.product,
             YEAR=args.year,
             PROCESSES=args.np,
             TIMEOUT=args.timeout,
