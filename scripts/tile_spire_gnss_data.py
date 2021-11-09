@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 u"""
 tile_spire_gnss_data.py
-Written by Tyler Sutterley (10/2021)
+Written by Tyler Sutterley (11/2021)
 Creates tile index files of Spire GNSS data
 
 INPUTS:
@@ -23,6 +23,7 @@ PYTHON DEPENDENCIES:
         https://pypi.org/project/pyproj/
 
 UPDATE HISTORY:
+    Updated 11/2021: output merged tile file with filenames
     Written 10/2021
 """
 import sys
@@ -127,27 +128,60 @@ def tile_spire_gnss_data(input_file,
     #-- for each valid tile pair
     for xp,yp in set(zip(xtile[valid],ytile[valid])):
         #-- create group
-        tile_group = 'E{0:0.0f}_N{1:0.0f}'.format(xp*SPACING,yp*SPACING)
-        g = f2.createGroup(tile_group)
+        tile_group = 'E{0:0.0f}_N{1:0.0f}'.format(xp*SPACING/1e3,yp*SPACING/1e3)
+        g2 = f2.createGroup(tile_group)
         #-- add group attributes
-        g.setncattr('x_center',xp*SPACING+SPACING/2.0)
-        g.setncattr('y_center',yp*SPACING+SPACING/2.0)
-        g.setncattr('spacing',SPACING)
+        g2.setncattr('x_center',xp*SPACING+SPACING/2.0)
+        g2.setncattr('y_center',yp*SPACING+SPACING/2.0)
+        g2.setncattr('spacing',SPACING)
+
+        #-- create merged tile file if not existing
+        tile_file = os.path.join(DIRECTORY,index_directory,
+            '{0}.nc'.format(tile_group))
+        clobber = 'a' if os.access(tile_file,os.F_OK) else 'w'
+        #-- open output merged tile file
+        f3 = netCDF4.Dataset(tile_file, clobber)
+        g3 = f3.createGroup(os.path.basename(input_file))
+        #-- add file-level variables and attributes
+        if (clobber == 'w'):
+            #-- create projection variable
+            nc = f3.createVariable('Polar_Stereographic',np.byte,())
+            #-- add projection attributes
+            nc.standard_name = 'Polar_Stereographic'
+            nc.spatial_epsg = crs2.to_epsg()
+            nc.spatial_ref = crs2.to_wkt()
+            for att_name,att_val in crs2.to_cf().items():
+                nc.setncattr(att_name,att_val)
+            #-- add file attributes
+            f3.setncattr('featureType','trajectory')
+            f3.setncattr('x_center',xp*SPACING+SPACING/2.0)
+            f3.setncattr('y_center',yp*SPACING+SPACING/2.0)
+            f3.setncattr('spacing',SPACING)
+            f3.setncattr('GDAL_AREA_OR_POINT','Point')
+            f3.setncattr('Conventions','CF-1.6')
+            f3.setncattr('time_type','GPS')
+            f3.setncattr('date_created',datetime.datetime.now().isoformat())
+
         #-- indices of points within tile
         indices, = np.nonzero((xtile == xp) & (ytile == yp))
         #-- output variables for index file
         output = dict(x=x[indices],y=y[indices],
             time=gps_time[indices],index=indices.copy())
-        #-- Defining the netCDF4 dimensions
-        g.createDimension('time', len(output['time']))
-        for key,val in output.items():
-            #-- Defining the netCDF4 variables
-            nc = g.createVariable(key, val.dtype, ('time',))
-            #-- filling the netCDF4 variables
-            nc[:] = val.copy()
-            #-- add variable attributes
-            for att_name,att_val in attributes[key].items():
-                setattr(nc,att_name,att_val)
+        #-- for each group
+        for g in [g2,g3]:
+            #-- Defining the netCDF4 dimensions
+            g.createDimension('time', len(output['time']))
+            for key,val in output.items():
+                #-- Defining the netCDF4 variables
+                nc = g.createVariable(key, val.dtype, ('time',))
+                #-- filling the netCDF4 variables
+                nc[:] = val.copy()
+                #-- add variable attributes
+                for att_name,att_val in attributes[key].items():
+                    setattr(nc,att_name,att_val)
+        #-- close the merged tile file
+        f3.close()
+
     #-- Output netCDF4 structure information
     logging.info(list(f2.groups.keys()) + list(f2.variables.keys()))
     #-- close the output file
