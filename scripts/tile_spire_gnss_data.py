@@ -24,6 +24,7 @@ PYTHON DEPENDENCIES:
 
 UPDATE HISTORY:
     Updated 11/2021: output merged tile file with filenames
+        adjust tiling to index by center coordinates
     Written 10/2021
 """
 import sys
@@ -108,7 +109,8 @@ def tile_spire_gnss_data(input_file,
     #-- convert latitude and longitude to regional projection
     x,y = transformer.transform(spec_lon,spec_lat)
     #-- large-scale tiles
-    xtile,ytile = (x//SPACING, y//SPACING)
+    xtile = (x-0.5*SPACING)//SPACING
+    ytile = (y-0.5*SPACING)//SPACING
 
     #-- open output index file
     f2 = netCDF4.Dataset(output_file,'w')
@@ -116,7 +118,8 @@ def tile_spire_gnss_data(input_file,
     f2.setncattr('GDAL_AREA_OR_POINT','Point')
     f2.setncattr('Conventions','CF-1.6')
     f2.setncattr('time_type','GPS')
-    f2.setncattr('date_created',datetime.datetime.now().isoformat())
+    today = datetime.datetime.now().isoformat()
+    f2.setncattr('date_created', today)
     #-- create projection variable
     nc = f2.createVariable('Polar_Stereographic',np.byte,())
     #-- add projection attributes
@@ -127,12 +130,15 @@ def tile_spire_gnss_data(input_file,
         nc.setncattr(att_name,att_val)
     #-- for each valid tile pair
     for xp,yp in set(zip(xtile[valid],ytile[valid])):
+        #-- center of each tile (adjust due to integer truncation)
+        xc = (xp+1)*SPACING
+        yc = (yp+1)*SPACING
         #-- create group
-        tile_group = 'E{0:0.0f}_N{1:0.0f}'.format(xp*SPACING/1e3,yp*SPACING/1e3)
+        tile_group = 'E{0:0.0f}_N{1:0.0f}'.format(xc/1e3,yc/1e3)
         g2 = f2.createGroup(tile_group)
         #-- add group attributes
-        g2.setncattr('x_center',xp*SPACING+SPACING/2.0)
-        g2.setncattr('y_center',yp*SPACING+SPACING/2.0)
+        g2.setncattr('x_center',xc)
+        g2.setncattr('y_center',yc)
         g2.setncattr('spacing',SPACING)
 
         #-- create merged tile file if not existing
@@ -154,13 +160,13 @@ def tile_spire_gnss_data(input_file,
                 nc.setncattr(att_name,att_val)
             #-- add file attributes
             f3.setncattr('featureType','trajectory')
-            f3.setncattr('x_center',xp*SPACING+SPACING/2.0)
-            f3.setncattr('y_center',yp*SPACING+SPACING/2.0)
+            f3.setncattr('x_center',xc)
+            f3.setncattr('y_center',yc)
             f3.setncattr('spacing',SPACING)
             f3.setncattr('GDAL_AREA_OR_POINT','Point')
             f3.setncattr('Conventions','CF-1.6')
             f3.setncattr('time_type','GPS')
-            f3.setncattr('date_created',datetime.datetime.now().isoformat())
+            f3.setncattr('date_created', today)
 
         #-- indices of points within tile
         indices, = np.nonzero((xtile == xp) & (ytile == yp))
