@@ -25,17 +25,28 @@ PYTHON DEPENDENCIES:
 UPDATE HISTORY:
     Updated 11/2021: output merged tile file with filenames
         adjust tiling to index by center coordinates
+        wait if merged netCDF4 tile file is unavailable
     Written 10/2021
 """
 import sys
 import os
 import re
+import time
 import pyproj
 import logging
 import netCDF4
 import argparse
-import datetime
 import numpy as np
+
+#-- PURPOSE: attempt to open an netCDF4 file and wait if already open
+def multiprocess_netCDF4(filename, *args, **kwargs):
+    while True:
+        try:
+            fileID = netCDF4.Dataset(filename, *args, **kwargs)
+            break
+        except (IOError, OSError, PermissionError) as e:
+            time.sleep(1)
+    return fileID
 
 #-- PURPOSE: create tile index files of Spire GNSS data
 def tile_spire_gnss_data(input_file,
@@ -52,8 +63,8 @@ def tile_spire_gnss_data(input_file,
     index_directory = 'north' if (HEM == 'N') else 'south'
     #-- output directory and index file
     DIRECTORY = os.path.dirname(input_file)
-    output_file = os.path.join(DIRECTORY, index_directory,
-        os.path.basename(input_file))
+    BASENAME = os.path.basename(input_file)
+    output_file = os.path.join(DIRECTORY, index_directory, BASENAME)
     #-- regular expression pattern for extracting data from files
     rx = re.compile(r'(spire_gnss-r)_(L\d+)_(.*?)_(v\d+\.\d+)_'
         r'(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})_(.*?)\.nc$')
@@ -118,7 +129,7 @@ def tile_spire_gnss_data(input_file,
     f2.setncattr('GDAL_AREA_OR_POINT','Point')
     f2.setncattr('Conventions','CF-1.6')
     f2.setncattr('time_type','GPS')
-    today = datetime.datetime.now().isoformat()
+    today = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
     f2.setncattr('date_created', today)
     #-- create projection variable
     nc = f2.createVariable('Polar_Stereographic',np.byte,())
@@ -146,8 +157,8 @@ def tile_spire_gnss_data(input_file,
             '{0}.nc'.format(tile_group))
         clobber = 'a' if os.access(tile_file,os.F_OK) else 'w'
         #-- open output merged tile file
-        f3 = netCDF4.Dataset(tile_file, clobber)
-        g3 = f3.createGroup(os.path.basename(input_file))
+        f3 = multiprocess_netCDF4(tile_file, clobber)
+        g3 = f3.createGroup(BASENAME)
         #-- add file-level variables and attributes
         if (clobber == 'w'):
             #-- create projection variable
