@@ -79,6 +79,7 @@ def tile_spire_gnss_data(input_file,
     transformer = pyproj.Transformer.from_crs(crs1, crs2, always_xy=True)
     #-- dictionary of coordinate reference system variables
     cs_to_cf = crs2.cs_to_cf()
+    crs_to_dict = crs2.to_dict()
 
     #-- attributes for each output item
     attributes = dict(x={},y={},index={},time={})
@@ -137,6 +138,8 @@ def tile_spire_gnss_data(input_file,
     nc.standard_name = 'Polar_Stereographic'
     nc.spatial_epsg = crs2.to_epsg()
     nc.spatial_ref = crs2.to_wkt()
+    nc.proj4_params = crs2.to_proj4()
+    nc.latitude_of_projection_origin = crs_to_dict['lat_0']
     for att_name,att_val in crs2.to_cf().items():
         nc.setncattr(att_name,att_val)
     #-- for each valid tile pair
