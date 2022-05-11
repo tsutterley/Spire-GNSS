@@ -16,8 +16,8 @@ Spire-GNSS
 .. |Binder| image:: https://mybinder.org/badge_logo.svg
    :target: https://mybinder.org/v2/gh/tsutterley/Spire-GNSS/main
 
-.. |Pangeo| image:: https://binder.pangeo.io/badge.svg
-   :target: https://binder.pangeo.io/v2/gh/tsutterley/Spire-GNSS/main
+.. |Pangeo| image:: https://img.shields.io/static/v1.svg?logo=Jupyter&label=PangeoBinderAWS&message=us-west-2&color=orange
+   :target: https://aws-uswest2-binder.pangeo.io/v2/gh/tsutterley/Spire-GNSS/main?urlpath=lab
 
 Python tools for obtaining and working with elevation data from Spire GNSS grazing angle altimetry
 

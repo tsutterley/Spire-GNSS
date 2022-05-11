@@ -31,4 +31,4 @@ Alternatively can install the ``spire_toolkit`` utilities directly from GitHub w
 
 Executable versions of this repository can also be tested using
 `Binder <https://mybinder.org/v2/gh/tsutterley/Spire-GNSS/main>`_ or
-`Pangeo <https://binder.pangeo.io/v2/gh/tsutterley/Spire-GNSS/main>`_.
+`Pangeo <https://aws-uswest2-binder.pangeo.io/v2/gh/tsutterley/Spire-GNSS/main?urlpath=lab>`_.
