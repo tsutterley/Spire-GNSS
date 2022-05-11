@@ -8,14 +8,25 @@ Spire-GNSS
     :caption: Getting Started
 
     getting_started/Install.rst
-    getting_started/Getting-Started.rst
     getting_started/Contributing.rst
     getting_started/Citations.rst
 
 .. toctree::
     :maxdepth: 1
     :hidden:
+    :caption: User Guide
+
+    user_guide/spatial.rst
+    user_guide/time.rst
+    user_guide/utilities.rst
+
+.. toctree::
+    :maxdepth: 1
+    :hidden:
     :caption: Utilities
 
-    user_guide/gmao_spire_gnss_sync.md
-    user_guide/tile_spire_gnss_data.md
+    user_guide/combine_spire_gnss_tiles.rst
+    user_guide/fit_spire_gnss_tiles.rst
+    user_guide/gmao_spire_gnss_sync.rst
+    user_guide/merge_spire_gnss_mosaics.rst
+    user_guide/tile_spire_gnss_data.rst

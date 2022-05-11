@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 u"""
 tile_spire_gnss_data.py
-Written by Tyler Sutterley (11/2021)
+Written by Tyler Sutterley (05/2022)
 Creates tile index files of Spire GNSS data
 
 INPUTS:
@@ -23,6 +23,7 @@ PYTHON DEPENDENCIES:
         https://pypi.org/project/pyproj/
 
 UPDATE HISTORY:
+    Updated 05/2022: use argparse descriptions within sphinx documentation
     Updated 11/2021: output merged tile file with filenames
         adjust tiling to index by center coordinates
         wait if merged netCDF4 tile file is unavailable
@@ -209,9 +210,8 @@ def tile_spire_gnss_data(input_file,
     #-- change the permissions mode of the output file
     os.chmod(output_file, mode=MODE)
 
-#-- Main program that calls tile_spire_gnss_data()
-def main():
-   #-- Read the system arguments listed after the program
+#-- PURPOSE: create arguments parser
+def arguments():
     parser = argparse.ArgumentParser(
         description="""Creates tile index files of Spire GNSS data
             """
@@ -236,6 +236,13 @@ def main():
     parser.add_argument('--mode','-M',
         type=lambda x: int(x,base=8), default=0o775,
         help='Permission mode of directories and files')
+    #-- return the parser
+    return parser
+
+#-- This is the main part of the program that calls the individual functions
+def main():
+    #-- Read the system arguments listed after the program
+    parser = arguments()
     args,_ = parser.parse_known_args()
 
     #-- run program for each product

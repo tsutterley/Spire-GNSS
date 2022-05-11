@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 u"""
 gmao_spire_gnss_sync.py
-Written by Tyler Sutterley (10/2021)
+Written by Tyler Sutterley (05/2022)
 
 Syncs Spire GNSS grazing angle altimetry data from the NASA
     Global Modeling and Assimilation Office (GMAO)
@@ -39,6 +39,7 @@ PROGRAM DEPENDENCIES:
     utilities.py: download and management utilities for syncing files
 
 UPDATE HISTORY:
+    Updated 05/2022: use argparse descriptions within sphinx documentation
     Updated 10/2021: using python logging for handling verbose output
     Written 10/2021
 """
@@ -186,9 +187,8 @@ def http_pull_file(REMOTE, DIRECTORY=None, TIMEOUT=None, MODE=None):
     #-- return the output string
     return output
 
-#-- Main program that calls gmao_spire_gnss_sync()
-def main():
-   #-- Read the system arguments listed after the program
+#-- PURPOSE: create argument parser
+def arguments():
     parser = argparse.ArgumentParser(
         description="""Syncs Spire GNSS grazing angle altimetry data from
             the NASA Global Modeling and Assimilation Office (GMAO)
@@ -237,6 +237,13 @@ def main():
     parser.add_argument('--mode','-M',
         type=lambda x: int(x,base=8), default=0o775,
         help='Permission mode of directories and files synced')
+    #-- return the parser
+    return parser
+
+#-- This is the main part of the program that calls the individual functions
+def main():
+    #-- Read the system arguments listed after the program
+    parser = arguments()
     args,_ = parser.parse_known_args()
 
     #-- NASA GMAO Extranet hostname
